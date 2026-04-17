@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/newrelic/newrelic-diagnostics-cli/tasks"
+	azureFunctions "github.com/newrelic/newrelic-diagnostics-cli/tasks/azure/functions"
 	androidAgent "github.com/newrelic/newrelic-diagnostics-cli/tasks/android/agent"
 	androidConfig "github.com/newrelic/newrelic-diagnostics-cli/tasks/android/config"
 	androidLog "github.com/newrelic/newrelic-diagnostics-cli/tasks/android/log"
@@ -68,6 +69,7 @@ import (
 )
 
 func init() {
+	azureFunctions.RegisterWith(Register)
 	env.RegisterWith(Register)
 	config.RegisterWith(Register)
 	collector.RegisterWith(Register)
@@ -115,11 +117,9 @@ func init() {
 	goEnv.RegisterWith(Register)
 	nodeEnv.RegisterWith(Register)
 	phpEnv.RegisterWith(Register)
-	pythonEnv.RegisterWith(Register)
 	dotnetCoreCustInst.RegisterWith(Register)
 	javaEnv.RegisterWith(Register)
 	dotnetCoreRequirements.RegisterWith(Register)
-	javaEnv.RegisterWith(Register)
 	dotnetCoreEnv.RegisterWith(Register)
 	baseAgent.RegisterWith(Register)
 	nodeRequirements.RegisterWith(Register)

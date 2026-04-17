@@ -36,8 +36,8 @@ func main() {
 	haberdasher.DefaultClient.SetRunID(runID)
 	haberdasher.DefaultClient.SetUserAgent("Nrdiag_/" + config.Version)
 
-	if config.HaberdasherURL == "" && !config.Flags.Quiet {
-		log.Info("No Haberdasher base URL set. Defaulting to localhost")
+	if config.HaberdasherURL == "" {
+		log.Debug("No Haberdasher base URL set. Defaulting to localhost")
 	} else {
 		haberdasher.DefaultClient.SetBaseURL(config.HaberdasherURL)
 	}

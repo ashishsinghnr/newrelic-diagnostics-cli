@@ -137,6 +137,26 @@ var suiteDefinitions = []Suite{
 		},
 	},
 	{
+		Identifier:  "azure-functions",
+		DisplayName: "Azure Functions Agent",
+		Description: "Diagnose New Relic agent installation on Azure Function Apps (all runtimes; crash dump tasks apply to .NET only). " +
+			"To also download a Kudu site dump, add: -override \"Azure/Functions/DownloadSiteDump.functionName=<name>,Azure/Functions/DownloadSiteDump.resourceGroup=<rg>\"",
+		Tasks: []string{
+			"Azure/Functions/FetchAppSettings",
+			"Azure/Functions/DetectFunctionApp",
+			"Azure/Functions/DetectRuntime",
+			"Azure/Functions/ValidateAgentConfig",
+			"Azure/Functions/CheckCrashDumpConfig",
+			"Azure/Functions/AgentInfo",
+			"Azure/Functions/AnalyzeLogs",
+			"Azure/Functions/DownloadSiteDump",
+			"Azure/Functions/CollectReport",
+			"Azure/Functions/CollectLiveMemoryDump",
+			"Azure/Functions/ConfigureCrashDump",
+			"Azure/Functions/CollectProcessDetails",
+		},
+	},
+	{
 		Identifier:  "all",
 		DisplayName: "All New Relic Products",
 		Description: "We only recommend this option if you are unsure of the NR product you are troubleshooting.",
