@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -87,7 +88,7 @@ func (t AzureFunctionsDownloadSiteDump) Execute(options tasks.Options, upstream 
 		client = &http.Client{Timeout: kuduTimeoutSeconds * time.Second}
 	}
 
-	scmURL := fmt.Sprintf("https://%s.scm.azurewebsites.net", funcName)
+	scmURL := fmt.Sprintf("https://%s.scm.azurewebsites.net", url.PathEscape(funcName))
 
 	authHeader, err := buildAuthHeader(runner, funcName, resourceGroup)
 	if err != nil {

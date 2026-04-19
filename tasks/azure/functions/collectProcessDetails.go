@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -100,7 +101,7 @@ func (t AzureFunctionsCollectProcessDetails) Execute(options tasks.Options, upst
 		}
 	}
 
-	time.Sleep(promptFlushDelay * time.Millisecond)
+	time.Sleep(promptFlushDelay)
 	if !tasks.PromptUser("Do you want to collect process property details (general, modules, handles, threads, environment variables)?", options) {
 		return tasks.Result{
 			Status:  tasks.None,
@@ -123,7 +124,7 @@ func (t AzureFunctionsCollectProcessDetails) Execute(options tasks.Options, upst
 		client = &http.Client{Timeout: processDetailTimeoutSeconds * time.Second}
 	}
 
-	scmURL := fmt.Sprintf("https://%s.scm.azurewebsites.net", funcName)
+	scmURL := fmt.Sprintf("https://%s.scm.azurewebsites.net", url.PathEscape(funcName))
 
 	authHeader, err := buildAuthHeader(runner, funcName, resourceGroup)
 	if err != nil {

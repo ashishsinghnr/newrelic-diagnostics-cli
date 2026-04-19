@@ -9,7 +9,9 @@ import (
 	"github.com/newrelic/newrelic-diagnostics-cli/tasks"
 )
 
-var licenseKeyFormat = regexp.MustCompile(`^[a-zA-Z0-9]{40}$`)
+// licenseKeyFormat accepts standard 40-char hex keys, INGEST-LICENSE keys (NRII-...),
+// and EU-region keys (eu01xx...). Minimum 32 chars, alphanumeric plus hyphens/underscores.
+var licenseKeyFormat = regexp.MustCompile(`^[a-zA-Z0-9_\-]{32,}$`)
 
 // newRelicDotnetProfilerGUID is the well-known CORECLR_PROFILER GUID for the NR .NET agent.
 const newRelicDotnetProfilerGUID = "{36032161-FFC0-4B61-B559-F6C5D41BAE5A}"
@@ -175,15 +177,16 @@ func validateDotnetProfilerVars(envVars map[string]string) (failures, warnings, 
 }
 
 func validateJavaAgentVars(envVars map[string]string) (warnings, summaryLines []string) {
-	javaOpts := firstNonEmpty(
-		envVars["JAVA_OPTS"],
-		envVars["WEBSITE_JAVA_OPTS"],
-		envVars["JAVA_TOOL_OPTIONS"],
-	)
-	key := "JAVA_OPTS"
-	if envVars["WEBSITE_JAVA_OPTS"] != "" {
+	var javaOpts, key string
+	switch {
+	case envVars["JAVA_OPTS"] != "":
+		javaOpts = envVars["JAVA_OPTS"]
+		key = "JAVA_OPTS"
+	case envVars["WEBSITE_JAVA_OPTS"] != "":
+		javaOpts = envVars["WEBSITE_JAVA_OPTS"]
 		key = "WEBSITE_JAVA_OPTS"
-	} else if envVars["JAVA_OPTS"] == "" && envVars["JAVA_TOOL_OPTIONS"] != "" {
+	case envVars["JAVA_TOOL_OPTIONS"] != "":
+		javaOpts = envVars["JAVA_TOOL_OPTIONS"]
 		key = "JAVA_TOOL_OPTIONS"
 	}
 

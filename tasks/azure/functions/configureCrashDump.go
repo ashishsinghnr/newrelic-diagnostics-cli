@@ -87,7 +87,7 @@ func (t AzureFunctionsConfigureCrashDump) Execute(options tasks.Options, upstrea
 		}
 	}
 
-	time.Sleep(promptFlushDelay * time.Millisecond)
+	time.Sleep(promptFlushDelay)
 	if !tasks.PromptUser(promptMsg, options) {
 		return tasks.Result{
 			Status:  tasks.None,
@@ -136,8 +136,13 @@ func applyAppSettings(runner func(string, ...string) ([]byte, error), funcName, 
 		"--settings",
 	}
 
-	for k, v := range settings {
-		args = append(args, fmt.Sprintf("%s=%s", k, v))
+	keys := make([]string, 0, len(settings))
+	for k := range settings {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		args = append(args, fmt.Sprintf("%s=%s", k, settings[k]))
 	}
 
 	out, err := runner("az", args...)

@@ -99,10 +99,10 @@ func maskIfSensitive(key, val string) string {
 	upper := strings.ToUpper(key)
 	for _, suffix := range sensitiveKeySuffixes {
 		if strings.HasSuffix(upper, suffix) {
-			if len(val) > 10 {
-				return val[:10] + "..."
+			if len(val) > 4 {
+				return val[:4] + "****"
 			}
-			return "***"
+			return "****"
 		}
 	}
 	return val

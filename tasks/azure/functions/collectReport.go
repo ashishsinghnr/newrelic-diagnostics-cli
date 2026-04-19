@@ -114,7 +114,11 @@ func buildReport(upstream map[string]tasks.Result) string {
 		if len(id) > len(prefix) {
 			name = id[len(prefix):]
 		}
-		sb.WriteString(fmt.Sprintf("[%-22s] %-8s - %s\n", name, statusLabel(result.Status), result.Summary))
+		summary := result.Summary
+		if i := strings.Index(summary, "\n"); i >= 0 {
+			summary = summary[:i]
+		}
+		sb.WriteString(fmt.Sprintf("[%-22s] %-8s - %s\n", name, statusLabel(result.Status), summary))
 	}
 
 	sb.WriteString("\n" + strings.Repeat("-", 51) + "\n")

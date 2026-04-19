@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -78,7 +79,7 @@ func (t AzureFunctionsCollectLiveMemoryDump) Execute(options tasks.Options, upst
 		}
 	}
 
-	time.Sleep(promptFlushDelay * time.Millisecond)
+	time.Sleep(promptFlushDelay)
 	if !tasks.PromptUser("Do you want to collect a Full Memory dump right now?", options) {
 		return tasks.Result{
 			Status:  tasks.None,
@@ -101,7 +102,7 @@ func (t AzureFunctionsCollectLiveMemoryDump) Execute(options tasks.Options, upst
 		client = &http.Client{Timeout: memDumpTimeoutSeconds * time.Second}
 	}
 
-	scmURL := fmt.Sprintf("https://%s.scm.azurewebsites.net", funcName)
+	scmURL := fmt.Sprintf("https://%s.scm.azurewebsites.net", url.PathEscape(funcName))
 
 	authHeader, err := buildAuthHeader(runner, funcName, resourceGroup)
 	if err != nil {

@@ -93,8 +93,8 @@ var _ = Describe("Azure/Functions/AgentInfo", func() {
 			It("should mask the license key in the payload", func() {
 				payload, ok := result.Payload.(map[string]string)
 				Expect(ok).To(BeTrue())
-				Expect(payload["NEW_RELIC_LICENSE_KEY"]).To(HaveSuffix("..."))
-				Expect(payload["NEW_RELIC_LICENSE_KEY"]).To(HaveLen(13)) // 10 chars + "..."
+				Expect(payload["NEW_RELIC_LICENSE_KEY"]).To(HaveSuffix("****"))
+				Expect(payload["NEW_RELIC_LICENSE_KEY"]).To(HaveLen(8)) // 4 chars + "****"
 			})
 			It("should not mask the app name", func() {
 				payload, ok := result.Payload.(map[string]string)
@@ -139,10 +139,10 @@ var _ = Describe("Azure/Functions/AgentInfo", func() {
 			func(key, val, expected string) {
 				Expect(maskIfSensitive(key, val)).To(Equal(expected))
 			},
-			Entry("license key (long)", "NEW_RELIC_LICENSE_KEY", "1234567890abcdef1234", "1234567890..."),
-			Entry("license key (short)", "NEW_RELIC_LICENSE_KEY", "short", "***"),
-			Entry("token", "MY_TOKEN", "abcdefghijklmnop", "abcdefghij..."),
-			Entry("obfuscated proxy pass", "NEW_RELIC_PROXY_PASS_OBFUSCATED", "obfuscatedvalue123", "obfuscated..."),
+			Entry("license key (long)", "NEW_RELIC_LICENSE_KEY", "1234567890abcdef1234", "1234****"),
+			Entry("license key (short)", "NEW_RELIC_LICENSE_KEY", "shor", "****"),
+			Entry("token", "MY_TOKEN", "abcdefghijklmnop", "abcd****"),
+			Entry("obfuscated proxy pass", "NEW_RELIC_PROXY_PASS_OBFUSCATED", "obfuscatedvalue123", "obfu****"),
 			Entry("app name (not sensitive)", "NEW_RELIC_APP_NAME", "my-app", "my-app"),
 			Entry("non-sensitive var", "NEW_RELIC_LOG_LEVEL", "debug", "debug"),
 		)
