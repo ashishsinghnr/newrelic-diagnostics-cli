@@ -10,8 +10,8 @@ import (
 )
 
 // licenseKeyFormat accepts standard 40-char hex keys, INGEST-LICENSE keys (NRII-...),
-// and EU-region keys (eu01xx...). Minimum 32 chars, alphanumeric plus hyphens/underscores.
-var licenseKeyFormat = regexp.MustCompile(`^[a-zA-Z0-9_\-]{32,}$`)
+// and EU-region keys (eu01xx...). Minimum 32 chars, maximum 128 chars.
+var licenseKeyFormat = regexp.MustCompile(`^[a-zA-Z0-9_\-]{32,128}$`)
 
 // newRelicDotnetProfilerGUID is the well-known CORECLR_PROFILER GUID for the NR .NET agent.
 const newRelicDotnetProfilerGUID = "{36032161-FFC0-4B61-B559-F6C5D41BAE5A}"
