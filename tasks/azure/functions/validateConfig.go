@@ -88,9 +88,8 @@ func collectValidationResults(envVars map[string]string, runtime string) (failur
 	summaryLines = append(summaryLines, s...)
 
 	if IsDotnetRuntime(runtime) {
-		f, w, s := validateDotnetProfilerVars(envVars)
+		f, s := validateDotnetProfilerVars(envVars)
 		failures = append(failures, f...)
-		warnings = append(warnings, w...)
 		summaryLines = append(summaryLines, s...)
 	}
 
@@ -110,6 +109,10 @@ func collectValidationResults(envVars map[string]string, runtime string) (failur
 		w, s := validatePythonAgentVars(envVars)
 		warnings = append(warnings, w...)
 		summaryLines = append(summaryLines, s...)
+	}
+
+	if IsUnsupportedAgentRuntime(runtime) {
+		summaryLines = append(summaryLines, fmt.Sprintf("Runtime %q has no first-party New Relic agent on Azure Functions; agent-level instrumentation checks are skipped", runtime))
 	}
 
 	if envVars["APPLICATIONINSIGHTS_CONNECTION_STRING"] != "" {
@@ -141,7 +144,7 @@ func validateAppName(envVars map[string]string) (warnings, summaryLines []string
 	return warnings, summaryLines
 }
 
-func validateDotnetProfilerVars(envVars map[string]string) (failures, warnings, summaryLines []string) {
+func validateDotnetProfilerVars(envVars map[string]string) (failures, summaryLines []string) {
 	if envVars["CORECLR_ENABLE_PROFILING"] != "1" {
 		failures = append(failures, fmt.Sprintf(
 			"CORECLR_ENABLE_PROFILING is %q; must be \"1\" for the .NET agent to attach",
@@ -155,7 +158,7 @@ func validateDotnetProfilerVars(envVars map[string]string) (failures, warnings, 
 	if profiler == "" {
 		failures = append(failures, "CORECLR_PROFILER is not set; it must be set to the New Relic profiler GUID "+newRelicDotnetProfilerGUID)
 	} else if !strings.EqualFold(profiler, newRelicDotnetProfilerGUID) {
-		warnings = append(warnings, fmt.Sprintf("CORECLR_PROFILER is %q; expected New Relic profiler GUID %s", profiler, newRelicDotnetProfilerGUID))
+		failures = append(failures, fmt.Sprintf("CORECLR_PROFILER is %q; must be exactly the New Relic profiler GUID %s for the .NET agent to attach (a malformed or different GUID will cause the CLR to load a different profiler or none at all)", profiler, newRelicDotnetProfilerGUID))
 	} else {
 		summaryLines = append(summaryLines, "CORECLR_PROFILER: correct New Relic GUID")
 	}
@@ -173,7 +176,7 @@ func validateDotnetProfilerVars(envVars map[string]string) (failures, warnings, 
 		summaryLines = append(summaryLines, fmt.Sprintf("CORECLR_PROFILER_PATH: %q", profilerPath))
 	}
 
-	return failures, warnings, summaryLines
+	return failures, summaryLines
 }
 
 func validateJavaAgentVars(envVars map[string]string) (warnings, summaryLines []string) {
@@ -211,6 +214,13 @@ func validateNodeAgentVars(envVars map[string]string) (warnings, summaryLines []
 	} else {
 		summaryLines = append(summaryLines, "NEW_RELIC_NO_CONFIG_FILE=true")
 	}
+
+	nodeOpts := envVars["NODE_OPTIONS"]
+	if !strings.Contains(nodeOpts, "--require newrelic") && !strings.Contains(nodeOpts, "-r newrelic") {
+		warnings = append(warnings, "NODE_OPTIONS does not contain \"--require newrelic\"; the New Relic Node.js agent may not auto-instrument unless it is required manually in your function code")
+	} else {
+		summaryLines = append(summaryLines, "NODE_OPTIONS contains --require newrelic")
+	}
 	return warnings, summaryLines
 }
 
@@ -219,6 +229,12 @@ func validatePythonAgentVars(envVars map[string]string) (warnings, summaryLines 
 		warnings = append(warnings, "PYTHONFAULTHANDLER is not set to \"1\"; enabling it improves crash diagnostics by printing a Python traceback on fatal signals")
 	} else {
 		summaryLines = append(summaryLines, "PYTHONFAULTHANDLER=1")
+	}
+
+	if configFile := strings.TrimSpace(envVars["NEW_RELIC_CONFIG_FILE"]); configFile != "" {
+		summaryLines = append(summaryLines, fmt.Sprintf("NEW_RELIC_CONFIG_FILE: %q", configFile))
+	} else {
+		summaryLines = append(summaryLines, "NEW_RELIC_CONFIG_FILE is not set; using environment-variable-only configuration (valid when the agent is initialized via newrelic.agent.initialize() in code)")
 	}
 	return warnings, summaryLines
 }

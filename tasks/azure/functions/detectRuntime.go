@@ -112,3 +112,12 @@ func IsNodeRuntime(runtime string) bool {
 func IsPythonRuntime(runtime string) bool {
 	return strings.ToLower(runtime) == "python"
 }
+
+// IsUnsupportedAgentRuntime returns true for runtimes that have no first-party
+// New Relic agent on Azure Functions (powershell, custom handlers). DetectRuntime
+// still identifies these so diagnostics can run, but agent-config validation
+// skips runtime-specific checks for them.
+func IsUnsupportedAgentRuntime(runtime string) bool {
+	r := strings.ToLower(runtime)
+	return r == "powershell" || r == "custom"
+}

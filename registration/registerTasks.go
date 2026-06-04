@@ -93,7 +93,7 @@ func init() {
 	pythonConfig.RegisterWith(Register)
 	pythonAgent.RegisterWith(Register)
 	pythonLog.RegisterWith(Register)
-	pythonEnv.RegisterWith(Register) // sole registration; a duplicate at ~line 120 was removed in ac7f004
+	pythonEnv.RegisterWith(Register)
 	pythonRequirements.RegisterWith(Register)
 	rubyConfig.RegisterWith(Register)
 	rubyAgent.RegisterWith(Register)
