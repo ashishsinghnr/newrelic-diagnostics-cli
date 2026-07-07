@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -73,6 +72,13 @@ func (t AzureFunctionsDownloadSiteDump) Execute(options tasks.Options, upstream 
 		}
 	}
 
+	if err := validateAzureTarget(funcName, resourceGroup); err != nil {
+		return tasks.Result{
+			Status:  tasks.Error,
+			Summary: err.Error(),
+		}
+	}
+
 	outputDir := options.Options["outputPath"]
 	if outputDir == "" {
 		outputDir = defaultOutputDir
@@ -88,7 +94,13 @@ func (t AzureFunctionsDownloadSiteDump) Execute(options tasks.Options, upstream 
 		client = &http.Client{Timeout: kuduTimeoutSeconds * time.Second}
 	}
 
-	scmURL := fmt.Sprintf("https://%s.scm.azurewebsites.net", url.PathEscape(funcName))
+	scmURL, err := buildScmURL(funcName)
+	if err != nil {
+		return tasks.Result{
+			Status:  tasks.Error,
+			Summary: err.Error(),
+		}
+	}
 
 	authHeader, err := buildAuthHeader(runner, funcName, resourceGroup)
 	if err != nil {
@@ -213,9 +225,12 @@ type publishingCredentials struct {
 
 // getPublishingCredentials fetches Basic-auth credentials via az CLI.
 func getPublishingCredentials(runner func(string, ...string) ([]byte, error), funcName, resourceGroup string) (string, string, error) {
+	// --flag=value form binds each value to its flag so az's argument parser can
+	// never interpret a value as a separate flag (defense-in-depth alongside
+	// validateAzureTarget).
 	out, err := runner("az", "functionapp", "deployment", "list-publishing-credentials",
-		"--name", funcName,
-		"--resource-group", resourceGroup,
+		"--name="+funcName,
+		"--resource-group="+resourceGroup,
 		"--query", "{publishingUserName:publishingUserName, publishingPassword:publishingPassword}",
 		"-o", "json",
 	)
@@ -233,9 +248,11 @@ func getPublishingCredentials(runner func(string, ...string) ([]byte, error), fu
 	return creds.PublishingUserName, creds.PublishingPassword, nil
 }
 
-// saveStream writes the response body to dst and returns the number of bytes written.
+// saveStream writes the response body to dst (mode 0600) and returns the
+// number of bytes written. Site dumps and live memory dumps may include
+// in-memory secrets, so the file is owner-readable only.
 func saveStream(src io.Reader, dst string) (int64, error) {
-	f, err := os.Create(dst)
+	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return 0, err
 	}

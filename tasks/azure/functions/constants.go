@@ -7,8 +7,14 @@ const (
 	taskFetchAppSettings      = "Azure/Functions/FetchAppSettings"
 	taskDownloadSiteDump      = "Azure/Functions/DownloadSiteDump"
 	taskDetectFunctionApp     = "Azure/Functions/DetectFunctionApp"
-	taskCollectProcessDetails = "Azure/Functions/CollectProcessDetails"
 	taskDetectRuntime         = "Azure/Functions/DetectRuntime"
+	taskValidateAgentConfig   = "Azure/Functions/ValidateAgentConfig"
+	taskCheckCrashDumpConfig  = "Azure/Functions/CheckCrashDumpConfig"
+	taskAgentInfo             = "Azure/Functions/AgentInfo"
+	taskAnalyzeLogs           = "Azure/Functions/AnalyzeLogs"
+	taskCollectProcessDetails = "Azure/Functions/CollectProcessDetails"
+	taskCollectLiveMemoryDump = "Azure/Functions/CollectLiveMemoryDump"
+	taskConfigureCrashDump    = "Azure/Functions/ConfigureCrashDump"
 )
 
 // promptFlushDelay is a short pause before interactive prompts to allow the

@@ -33,11 +33,15 @@ func (t AzureFunctionsCollectReport) Dependencies() []string {
 	return []string{
 		taskDetectFunctionApp,
 		taskFetchAppSettings,
-		"Azure/Functions/DetectRuntime",
-		"Azure/Functions/ValidateAgentConfig",
-		"Azure/Functions/CheckCrashDumpConfig",
-		"Azure/Functions/AgentInfo",
-		"Azure/Functions/AnalyzeLogs",
+		taskDetectRuntime,
+		taskValidateAgentConfig,
+		taskCheckCrashDumpConfig,
+		taskAgentInfo,
+		taskAnalyzeLogs,
+		taskDownloadSiteDump,
+		taskCollectProcessDetails,
+		taskCollectLiveMemoryDump,
+		taskConfigureCrashDump,
 	}
 }
 
@@ -97,11 +101,15 @@ func buildReport(upstream map[string]tasks.Result) string {
 	order := []string{
 		taskDetectFunctionApp,
 		taskFetchAppSettings,
-		"Azure/Functions/DetectRuntime",
-		"Azure/Functions/ValidateAgentConfig",
-		"Azure/Functions/CheckCrashDumpConfig",
-		"Azure/Functions/AgentInfo",
-		"Azure/Functions/AnalyzeLogs",
+		taskDetectRuntime,
+		taskValidateAgentConfig,
+		taskCheckCrashDumpConfig,
+		taskAgentInfo,
+		taskAnalyzeLogs,
+		taskDownloadSiteDump,
+		taskCollectProcessDetails,
+		taskCollectLiveMemoryDump,
+		taskConfigureCrashDump,
 	}
 
 	for _, id := range order {
@@ -114,17 +122,38 @@ func buildReport(upstream map[string]tasks.Result) string {
 		if len(id) > len(prefix) {
 			name = id[len(prefix):]
 		}
-		summary := result.Summary
-		if i := strings.Index(summary, "\n"); i >= 0 {
-			summary = summary[:i]
+		// Print the full multi-line summary so the [FAILURE]/[WARNING]/[OK]
+		// blocks produced by validateConfig.buildSummary survive into the
+		// report. The first line shows on the header row; subsequent lines
+		// are indented under it for readability.
+		header, rest := splitFirstLine(result.Summary)
+		sb.WriteString(fmt.Sprintf("[%-22s] %-8s - %s\n", name, statusLabel(result.Status), header))
+		for _, line := range rest {
+			sb.WriteString("    " + line + "\n")
 		}
-		sb.WriteString(fmt.Sprintf("[%-22s] %-8s - %s\n", name, statusLabel(result.Status), summary))
 	}
 
 	sb.WriteString("\n" + strings.Repeat("-", 51) + "\n")
 	sb.WriteString("End of report. See nrdiag-output.zip for all collected files.\n")
 
 	return sb.String()
+}
+
+// splitFirstLine returns the first line of s and any remaining non-empty lines.
+// Trailing whitespace on each line is trimmed.
+func splitFirstLine(s string) (first string, rest []string) {
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	if len(lines) == 0 {
+		return "", nil
+	}
+	first = lines[0]
+	for _, line := range lines[1:] {
+		trimmed := strings.TrimRight(line, " \t")
+		if trimmed != "" {
+			rest = append(rest, trimmed)
+		}
+	}
+	return first, rest
 }
 
 // statusLabel returns a short human-readable label for a task status.

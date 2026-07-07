@@ -19,12 +19,16 @@ func mockGlober(files map[string][]string) func(string) ([]string, error) {
 	}
 }
 
-func mockScanner(fileContents map[string][]string) func(string) ([]string, error) {
-	return func(path string) ([]string, error) {
-		if lines, ok := fileContents[path]; ok {
-			return lines, nil
+func mockScanner(fileContents map[string][]string) scanLineFn {
+	return func(path string, process func(line string)) error {
+		lines, ok := fileContents[path]
+		if !ok {
+			return errors.New("file not found: " + path)
 		}
-		return nil, errors.New("file not found: " + path)
+		for _, line := range lines {
+			process(line)
+		}
+		return nil
 	}
 }
 

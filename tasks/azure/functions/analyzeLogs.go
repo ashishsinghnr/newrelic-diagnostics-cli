@@ -61,13 +61,22 @@ var generalErrorPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)OutOfMemoryException`),
 }
 
+// maxLogLineBytes bounds the per-line buffer used by the streaming scanner.
+// The default bufio.Scanner token size of 64 KB silently drops longer lines
+// (visible only via scanner.Err()), which can hide whole stack traces.
+const maxLogLineBytes = 1024 * 1024
+
+// scanLineFn invokes process for each line of the file. It uses a streaming
+// scanner so verbose logs cannot OOM the diagnostic.
+type scanLineFn func(path string, process func(line string)) error
+
 // AzureFunctionsAnalyzeLogs scans local Azure Function App log files for
 // New Relic agent error and warning patterns.
 type AzureFunctionsAnalyzeLogs struct {
 	// logPathGlober allows injection for testing without real filesystem.
 	logPathGlober func(pattern string) ([]string, error)
 	// lineScanner allows injection for testing file reading.
-	lineScanner func(path string) ([]string, error)
+	lineScanner scanLineFn
 }
 
 // Identifier returns the task identifier.
@@ -102,7 +111,7 @@ func (t AzureFunctionsAnalyzeLogs) Execute(options tasks.Options, upstream map[s
 	}
 	scanner := t.lineScanner
 	if scanner == nil {
-		scanner = readLines
+		scanner = streamLines
 	}
 
 	logFiles := collectLogFiles(glober)
@@ -115,13 +124,15 @@ func (t AzureFunctionsAnalyzeLogs) Execute(options tasks.Options, upstream map[s
 
 	analysis := &LogAnalysisResult{}
 	for _, f := range logFiles {
-		lines, err := scanner(f)
+		filename := f
+		err := scanner(f, func(line string) {
+			scanOneLine(filename, line, analysis)
+		})
 		if err != nil {
 			log.Debug("Azure/Functions/AnalyzeLogs: could not read " + f + ": " + err.Error())
 			continue
 		}
 		analysis.FilesScanned++
-		scanLines(f, lines, analysis)
 	}
 
 	return buildLogAnalysisResult(analysis)
@@ -141,21 +152,20 @@ func collectLogFiles(glober func(string) ([]string, error)) []string {
 	return files
 }
 
-func scanLines(filename string, lines []string, out *LogAnalysisResult) {
-	for _, line := range lines {
-		// NR errors take priority.
-		if matched, pattern := matchAny(line, nrErrorPatterns); matched {
-			out.NRErrors = append(out.NRErrors, LogEntry{File: filename, Line: truncate(line, 200), Pattern: pattern})
-			continue
-		}
-		if matched, pattern := matchAny(line, nrWarningPatterns); matched {
-			out.NRWarnings = append(out.NRWarnings, LogEntry{File: filename, Line: truncate(line, 200), Pattern: pattern})
-			continue
-		}
-		if matched, _ := matchAny(line, generalErrorPatterns); matched {
-			if len(out.GeneralErrors) < maxGeneralErrors {
-				out.GeneralErrors = append(out.GeneralErrors, LogEntry{File: filename, Line: truncate(line, 200)})
-			}
+// scanOneLine matches a single line against NR-error, NR-warning, and general
+// error patterns and appends to the appropriate bucket. NR errors take priority.
+func scanOneLine(filename, line string, out *LogAnalysisResult) {
+	if matched, pattern := matchAny(line, nrErrorPatterns); matched {
+		out.NRErrors = append(out.NRErrors, LogEntry{File: filename, Line: truncate(line, 200), Pattern: pattern})
+		return
+	}
+	if matched, pattern := matchAny(line, nrWarningPatterns); matched {
+		out.NRWarnings = append(out.NRWarnings, LogEntry{File: filename, Line: truncate(line, 200), Pattern: pattern})
+		return
+	}
+	if matched, _ := matchAny(line, generalErrorPatterns); matched {
+		if len(out.GeneralErrors) < maxGeneralErrors {
+			out.GeneralErrors = append(out.GeneralErrors, LogEntry{File: filename, Line: truncate(line, 200)})
 		}
 	}
 }
@@ -216,19 +226,24 @@ func buildLogAnalysisResult(a *LogAnalysisResult) tasks.Result {
 	}
 }
 
-func readLines(path string) ([]string, error) {
+// streamLines opens path and invokes process for each line, without buffering
+// the whole file in memory. The scanner buffer is bumped to maxLogLineBytes so
+// long stack-trace lines aren't silently truncated. Truncation that does occur
+// (a single line bigger than the cap) is surfaced via scanner.Err() — bufio
+// returns ErrTooLong in that case.
+func streamLines(path string, process func(line string)) error {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer f.Close()
 
-	var lines []string
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 64*1024), maxLogLineBytes)
 	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
+		process(scanner.Text())
 	}
-	return lines, scanner.Err()
+	return scanner.Err()
 }
 
 func truncate(s string, max int) string {

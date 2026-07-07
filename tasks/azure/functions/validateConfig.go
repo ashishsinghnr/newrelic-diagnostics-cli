@@ -9,8 +9,11 @@ import (
 	"github.com/newrelic/newrelic-diagnostics-cli/tasks"
 )
 
-// licenseKeyFormat accepts standard 40-char hex keys, INGEST-LICENSE keys (NRII-...),
-// and EU-region keys (eu01xx...). Minimum 32 chars, maximum 128 chars.
+// licenseKeyFormat is intentionally permissive: it accepts any identifier-shaped
+// string between 32 and 128 characters (alphanumeric plus _ and -). This is
+// loose enough to cover legacy 40-char hex keys, INGEST-LICENSE keys (NRII-...),
+// and EU-region keys (eu01xx...) without coupling the diagnostic to specific
+// New Relic key formats that may evolve over time.
 var licenseKeyFormat = regexp.MustCompile(`^[a-zA-Z0-9_\-]{32,128}$`)
 
 // newRelicDotnetProfilerGUID is the well-known CORECLR_PROFILER GUID for the NR .NET agent.
@@ -34,7 +37,7 @@ func (t AzureFunctionsValidateAgentConfig) Explain() string {
 func (t AzureFunctionsValidateAgentConfig) Dependencies() []string {
 	return []string{
 		taskDetectFunctionApp,
-		"Azure/Functions/DetectRuntime",
+		taskDetectRuntime,
 		"Base/Env/CollectEnvVars",
 		taskFetchAppSettings,
 	}
@@ -51,7 +54,7 @@ func (t AzureFunctionsValidateAgentConfig) Execute(options tasks.Options, upstre
 		}
 	}
 
-	runtime, _ := upstream["Azure/Functions/DetectRuntime"].Payload.(string)
+	runtime, _ := upstream[taskDetectRuntime].Payload.(string)
 
 	failures, warnings, summaryLines := collectValidationResults(envVars, runtime)
 
@@ -127,7 +130,7 @@ func validateLicenseKey(envVars map[string]string) (failures, summaryLines []str
 	if licenseKey == "" {
 		failures = append(failures, "NEW_RELIC_LICENSE_KEY is not set")
 	} else if !licenseKeyFormat.MatchString(licenseKey) {
-		failures = append(failures, "NEW_RELIC_LICENSE_KEY does not match the expected 40-character alphanumeric format")
+		failures = append(failures, "NEW_RELIC_LICENSE_KEY is not a valid New Relic license key (expected 32–128 alphanumeric characters with optional '-' or '_'; e.g. legacy 40-char hex, NRII- ingest, or eu01x... EU keys)")
 	} else {
 		summaryLines = append(summaryLines, "NEW_RELIC_LICENSE_KEY: present and correctly formatted")
 	}

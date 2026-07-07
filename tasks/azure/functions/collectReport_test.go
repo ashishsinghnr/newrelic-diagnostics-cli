@@ -32,6 +32,10 @@ var _ = Describe("Azure/Functions/CollectReport", func() {
 				"Azure/Functions/CheckCrashDumpConfig",
 				"Azure/Functions/AgentInfo",
 				"Azure/Functions/AnalyzeLogs",
+				"Azure/Functions/DownloadSiteDump",
+				"Azure/Functions/CollectProcessDetails",
+				"Azure/Functions/CollectLiveMemoryDump",
+				"Azure/Functions/ConfigureCrashDump",
 			))
 		})
 	})

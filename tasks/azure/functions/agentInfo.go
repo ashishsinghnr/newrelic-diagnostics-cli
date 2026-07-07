@@ -41,7 +41,7 @@ func (t AzureFunctionsAgentInfo) Explain() string {
 func (t AzureFunctionsAgentInfo) Dependencies() []string {
 	return []string{
 		taskDetectFunctionApp,
-		"Azure/Functions/DetectRuntime",
+		taskDetectRuntime,
 		"Base/Env/CollectEnvVars",
 		taskFetchAppSettings,
 	}
@@ -58,7 +58,7 @@ func (t AzureFunctionsAgentInfo) Execute(options tasks.Options, upstream map[str
 		}
 	}
 
-	runtime, _ := upstream["Azure/Functions/DetectRuntime"].Payload.(string)
+	runtime, _ := upstream[taskDetectRuntime].Payload.(string)
 
 	collected := make(map[string]string)
 
@@ -95,8 +95,17 @@ func (t AzureFunctionsAgentInfo) Execute(options tasks.Options, upstream map[str
 }
 
 // maskIfSensitive returns a masked version of val when key indicates a secret.
+// License keys are masked completely — legacy 40-char keys have random leading
+// characters, so even a 4-char prefix can leak entropy. Other secrets keep a
+// short prefix to help operators visually disambiguate which credential is set.
 func maskIfSensitive(key, val string) string {
+	if val == "" {
+		return val
+	}
 	upper := strings.ToUpper(key)
+	if strings.HasSuffix(upper, "_LICENSE_KEY") {
+		return "****"
+	}
 	for _, suffix := range sensitiveKeySuffixes {
 		if strings.HasSuffix(upper, suffix) {
 			if len(val) > 4 {

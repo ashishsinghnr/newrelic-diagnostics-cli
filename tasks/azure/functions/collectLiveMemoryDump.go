@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -79,6 +78,13 @@ func (t AzureFunctionsCollectLiveMemoryDump) Execute(options tasks.Options, upst
 		}
 	}
 
+	if err := validateAzureTarget(funcName, resourceGroup); err != nil {
+		return tasks.Result{
+			Status:  tasks.Error,
+			Summary: err.Error(),
+		}
+	}
+
 	time.Sleep(promptFlushDelay)
 	if !tasks.PromptUser("Do you want to collect a Full Memory dump right now?", options) {
 		return tasks.Result{
@@ -102,7 +108,13 @@ func (t AzureFunctionsCollectLiveMemoryDump) Execute(options tasks.Options, upst
 		client = &http.Client{Timeout: memDumpTimeoutSeconds * time.Second}
 	}
 
-	scmURL := fmt.Sprintf("https://%s.scm.azurewebsites.net", url.PathEscape(funcName))
+	scmURL, err := buildScmURL(funcName)
+	if err != nil {
+		return tasks.Result{
+			Status:  tasks.Error,
+			Summary: err.Error(),
+		}
+	}
 
 	authHeader, err := buildAuthHeader(runner, funcName, resourceGroup)
 	if err != nil {
@@ -201,10 +213,13 @@ func listProcesses(client *http.Client, scmURL, authHeader string) ([]kuduProces
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusBadRequest {
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusBadRequest:
 		return nil, fmt.Errorf("process API returned HTTP 400 — not supported on Linux App Service; requires Windows App Service or a compatible Azure Functions plan")
-	}
-	if resp.StatusCode != http.StatusOK {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return nil, fmt.Errorf("Kudu /api/processes/ returned HTTP %d — Azure credentials likely missing or expired; run `az login` and retry", resp.StatusCode)
+	default:
 		return nil, fmt.Errorf("Kudu /api/processes/ returned HTTP %d", resp.StatusCode)
 	}
 
@@ -216,19 +231,44 @@ func listProcesses(client *http.Client, scmURL, authHeader string) ([]kuduProces
 }
 
 // autoSelectProcess returns the first known runtime process from the list.
-// It matches dotnet/w3wp/func (.NET), node (Node.js), python/python3 (Python),
-// and java (JVM) processes so that the prompt works for all supported runtimes.
+// It matches the canonical executable names for each supported runtime: dotnet,
+// w3wp, func (.NET), node (Node.js), python (Python), and java (JVM). Matching
+// uses the executable basename with any extension stripped, and accepts an
+// optional trailing version suffix ("python3", "node20") so the common Linux
+// names work. Non-runtime processes whose names happen to contain those
+// substrings (e.g. "snode", "pythonpath-helper") are not selected.
 func autoSelectProcess(processes []kuduProcess) (pid int, name string, found bool) {
-	candidates := []string{"dotnet", "w3wp", "func", "node", "python", "python3", "java"}
+	canonical := []string{"dotnet", "w3wp", "func", "node", "python", "java"}
 	for _, p := range processes {
-		nameLower := strings.ToLower(p.Name)
-		for _, candidate := range candidates {
-			if strings.Contains(nameLower, candidate) {
+		base := strings.ToLower(p.Name)
+		if i := strings.LastIndex(base, "."); i >= 0 {
+			base = base[:i] // strip extension (e.g. ".exe")
+		}
+		for _, c := range canonical {
+			if isCanonicalRuntimeName(base, c) {
 				return p.ID, p.Name, true
 			}
 		}
 	}
 	return 0, "", false
+}
+
+// isCanonicalRuntimeName reports whether base equals canonical or canonical
+// followed only by digits (e.g. "python", "python3", "node20"). It does not
+// match canonical as a substring or with non-digit suffixes.
+func isCanonicalRuntimeName(base, canonical string) bool {
+	if base == canonical {
+		return true
+	}
+	if !strings.HasPrefix(base, canonical) {
+		return false
+	}
+	for _, r := range base[len(canonical):] {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // promptProcessSelection displays the running process list and reads a PID

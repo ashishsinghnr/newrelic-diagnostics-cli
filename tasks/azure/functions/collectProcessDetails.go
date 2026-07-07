@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -101,6 +100,13 @@ func (t AzureFunctionsCollectProcessDetails) Execute(options tasks.Options, upst
 		}
 	}
 
+	if err := validateAzureTarget(funcName, resourceGroup); err != nil {
+		return tasks.Result{
+			Status:  tasks.Error,
+			Summary: err.Error(),
+		}
+	}
+
 	time.Sleep(promptFlushDelay)
 	if !tasks.PromptUser("Do you want to collect process property details (general, modules, handles, threads, environment variables)?", options) {
 		return tasks.Result{
@@ -124,7 +130,13 @@ func (t AzureFunctionsCollectProcessDetails) Execute(options tasks.Options, upst
 		client = &http.Client{Timeout: processDetailTimeoutSeconds * time.Second}
 	}
 
-	scmURL := fmt.Sprintf("https://%s.scm.azurewebsites.net", url.PathEscape(funcName))
+	scmURL, err := buildScmURL(funcName)
+	if err != nil {
+		return tasks.Result{
+			Status:  tasks.Error,
+			Summary: err.Error(),
+		}
+	}
 
 	authHeader, err := buildAuthHeader(runner, funcName, resourceGroup)
 	if err != nil {
@@ -200,10 +212,13 @@ func fetchProcessDetail(client *http.Client, scmURL, authHeader string, pid int)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusBadRequest {
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusBadRequest:
 		return nil, fmt.Errorf("process API returned HTTP 400 for PID %d — this feature is not supported on Linux App Service; it requires Windows App Service or a compatible Azure Functions plan", pid)
-	}
-	if resp.StatusCode != http.StatusOK {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return nil, fmt.Errorf("Kudu returned HTTP %d for process %d — Azure credentials likely missing or expired; run `az login` and retry", resp.StatusCode, pid)
+	default:
 		return nil, fmt.Errorf("Kudu returned HTTP %d for process %d", resp.StatusCode, pid)
 	}
 
@@ -215,9 +230,17 @@ func fetchProcessDetail(client *http.Client, scmURL, authHeader string, pid int)
 }
 
 // saveProcessDetails writes one pretty-printed JSON file per Kudu process tab.
-// Returns the list of written file paths.
+// Returns the list of written file paths. The environment-variables section is
+// masked via maskIfSensitive before being written, since Azure function
+// processes typically have NEW_RELIC_LICENSE_KEY, APPLICATIONINSIGHTS_CONNECTION_STRING,
+// and storage account keys in their environment.
 func saveProcessDetails(detail *kuduProcessDetail, outputDir, funcName string) ([]string, error) {
 	prefix := fmt.Sprintf("%s-pid%d", funcName, detail.ID)
+
+	envSection, err := maskEnvironmentVariables(detail.EnvironmentVariables)
+	if err != nil {
+		return nil, fmt.Errorf("failed to mask environment variables: %w", err)
+	}
 
 	sections := []struct {
 		suffix string
@@ -227,7 +250,7 @@ func saveProcessDetails(detail *kuduProcessDetail, outputDir, funcName string) (
 		{"modules", detail.Modules},
 		{"handles", detail.OpenFileHandles},
 		{"threads", detail.Threads},
-		{"environment", detail.EnvironmentVariables},
+		{"environment", envSection},
 	}
 
 	var saved []string
@@ -237,12 +260,34 @@ func saveProcessDetails(detail *kuduProcessDetail, outputDir, funcName string) (
 			return saved, fmt.Errorf("failed to marshal %s section: %w", s.suffix, err)
 		}
 		path := filepath.Join(outputDir, fmt.Sprintf("%s-%s.json", prefix, s.suffix))
-		if err := os.WriteFile(path, b, 0644); err != nil {
+		if err := os.WriteFile(path, b, 0600); err != nil {
 			return saved, fmt.Errorf("failed to write %s: %w", path, err)
 		}
 		saved = append(saved, path)
 	}
 	return saved, nil
+}
+
+// maskEnvironmentVariables decodes the raw JSON env-var map from Kudu, applies
+// maskIfSensitive to each value, and returns a sorted map ready for marshalling.
+// If the input is empty/null it is returned unchanged so callers see the same
+// shape as Kudu produced.
+func maskEnvironmentVariables(raw json.RawMessage) (any, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return raw, nil
+	}
+	var env map[string]string
+	if err := json.Unmarshal(raw, &env); err != nil {
+		// Not a string map (older Kudu builds may emit a different shape).
+		// Fall back to leaving the section untouched rather than dropping data.
+		log.Debug("Azure/Functions/CollectProcessDetails: environment_variables is not a string map; cannot mask")
+		return raw, nil
+	}
+	masked := make(map[string]string, len(env))
+	for k, v := range env {
+		masked[k] = maskIfSensitive(k, v)
+	}
+	return masked, nil
 }
 
 // buildGeneralSection extracts all scalar fields from the process detail into

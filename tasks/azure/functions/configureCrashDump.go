@@ -51,7 +51,7 @@ func (t AzureFunctionsConfigureCrashDump) Explain() string {
 // Dependencies ensures this task runs after the live memory dump prompt.
 func (t AzureFunctionsConfigureCrashDump) Dependencies() []string {
 	return []string{
-		"Azure/Functions/CollectLiveMemoryDump",
+		taskCollectLiveMemoryDump,
 		taskDownloadSiteDump,
 		taskDetectRuntime,
 	}
@@ -65,6 +65,13 @@ func (t AzureFunctionsConfigureCrashDump) Execute(options tasks.Options, upstrea
 		return tasks.Result{
 			Status:  tasks.None,
 			Summary: "Skipped: functionName and resourceGroup options are required",
+		}
+	}
+
+	if err := validateAzureTarget(funcName, resourceGroup); err != nil {
+		return tasks.Result{
+			Status:  tasks.Error,
+			Summary: err.Error(),
 		}
 	}
 
@@ -129,10 +136,13 @@ func (t AzureFunctionsConfigureCrashDump) Execute(options tasks.Options, upstrea
 
 // applyAppSettings runs az functionapp config appsettings set to apply key=value pairs.
 func applyAppSettings(runner func(string, ...string) ([]byte, error), funcName, resourceGroup string, settings map[string]string) error {
+	// --flag=value form binds each value to its flag so az's argument parser can
+	// never interpret a value as a separate flag (defense-in-depth alongside
+	// validateAzureTarget).
 	args := []string{
 		"functionapp", "config", "appsettings", "set",
-		"--name", funcName,
-		"--resource-group", resourceGroup,
+		"--name=" + funcName,
+		"--resource-group=" + resourceGroup,
 		"--settings",
 	}
 
@@ -173,5 +183,6 @@ func formatConfigureSummary(funcName string, settings map[string]string) string 
 		sb.WriteString(fmt.Sprintf("  %s = %s\n", k, settings[k]))
 	}
 	sb.WriteString("\nNote: Azure will restart the Function App to apply the new settings.")
+	sb.WriteString("\nTo undo: see docs/Azure-Functions-CrashDump-Rollback.md (delete the listed App Settings and restart).")
 	return strings.TrimRight(sb.String(), "\n")
 }

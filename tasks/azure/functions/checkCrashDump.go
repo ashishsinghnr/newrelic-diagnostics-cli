@@ -62,7 +62,7 @@ func (t AzureFunctionsCheckCrashDumpConfig) Explain() string {
 func (t AzureFunctionsCheckCrashDumpConfig) Dependencies() []string {
 	return []string{
 		taskDetectFunctionApp,
-		"Azure/Functions/DetectRuntime",
+		taskDetectRuntime,
 		"Base/Env/CollectEnvVars",
 		taskFetchAppSettings,
 	}
@@ -80,7 +80,7 @@ func (t AzureFunctionsCheckCrashDumpConfig) Execute(options tasks.Options, upstr
 		}
 	}
 
-	runtime, _ := upstream["Azure/Functions/DetectRuntime"].Payload.(string)
+	runtime, _ := upstream[taskDetectRuntime].Payload.(string)
 
 	scanner := t.dumpDirScanner
 	if scanner == nil {
@@ -186,6 +186,7 @@ func scanDumpDir(dir string, patterns []string) ([]DumpFile, error) {
 		for _, path := range matches {
 			info, err := os.Stat(path)
 			if err != nil {
+				log.Debug("Azure/Functions/CheckCrashDumpConfig: skipping " + path + ": " + err.Error())
 				continue
 			}
 			found = append(found, DumpFile{
